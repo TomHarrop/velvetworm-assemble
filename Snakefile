@@ -87,7 +87,7 @@ rule polish_long_reads:
         aln = 'output/020_long_read_polishing/bam-chunks/chunk_{chunk}.sam',
         fq = 'output/020_long_read_polishing/read-chunks/chunk_{chunk}.fq'
     output:
-        'output/020_long_read_polishing/racon-chunks/{chunk}.fasta'
+        temp('output/020_long_read_polishing/racon-chunks/{chunk}.fasta')
     params:
         wait_time = '60m',
         cuda_batches = 65
@@ -116,9 +116,9 @@ rule retrieve_reads:
                           chunk=all_chunks),
         fastq = ont_raw
     output:
-        expand(('output/020_long_read_polishing/read-chunks/'
-                'chunk_{chunk}.fq'),
-               chunk=all_chunks)
+        temp(expand(('output/020_long_read_polishing/read-chunks/'
+                     'chunk_{chunk}.fq'),
+                    chunk=all_chunks))
     params:
         outdir = 'output/020_long_read_polishing/read-chunks/'
     log:
@@ -153,7 +153,7 @@ rule chunk_bam:
         bai = 'output/020_long_read_polishing/aln_sorted.bam.bai',
         contig_list = 'output/015_genome-chunks/chunk_{chunk}_contigs.txt'
     output:
-        'output/020_long_read_polishing/bam-chunks/chunk_{chunk}.sam'
+        temp('output/020_long_read_polishing/bam-chunks/chunk_{chunk}.sam')
     log:
         'output/logs/020_long_read_polishing/view_{chunk}.log'
     threads:
@@ -246,7 +246,7 @@ rule list_contigs:
     input:
         'output/015_genome-chunks/chunk_{chunk}.fasta'
     output:
-        'output/015_genome-chunks/chunk_{chunk}_contigs.txt'
+        temp('output/015_genome-chunks/chunk_{chunk}_contigs.txt')
     threads:
         1
     singularity:
@@ -258,8 +258,8 @@ rule partition:
     input:
         'output/010_flye/assembly.fasta'
     output:
-        expand('output/015_genome-chunks/chunk_{chunk}.fasta',
-               chunk=all_chunks)
+        temp(expand('output/015_genome-chunks/chunk_{chunk}.fasta',
+                    chunk=all_chunks))
     params:
         outfile = 'output/015_genome-chunks/chunk_%.fasta',
         ways = n_chunks
