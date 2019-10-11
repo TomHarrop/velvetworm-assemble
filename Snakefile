@@ -25,11 +25,14 @@ def resolve_path(x):
 
 ont_raw = 'data/all_passed_reads.fastq'
 
+bbmap_container = 'shub://TomHarrop/singularity-containers:bbmap_38.50b'
+biopython = 'shub://TomHarrop/singularity-containers:biopython_1.73'
 busco_container = 'shub://TomHarrop/singularity-containers:busco_3.0.2'
 flye_container = 'shub://TomHarrop/singularity-containers:flye_2.5'
-minimap_container = 'shub://TomHarrop/singularity-containers:minimap2_2.11r797'
-racon_container = 'library://tomharrop/default/genomics:racon_1.4.7'
-
+minimap_container = 'shub://TomHarrop/singularity-containers:minimap2_2.17r941'
+racon_container = ('docker://quay.io/tomharrop/genomics:'
+                   'racon_ededb83-nvidia_410-bionic')
+samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
 
 ########
 # MAIN #
@@ -37,13 +40,18 @@ racon_container = 'library://tomharrop/default/genomics:racon_1.4.7'
 
 busco_inputs = {
     'flye': 'output/010_flye/assembly.fasta',
-    'polish_lr': 'output/020_long_read_polishing/racon.fasta'
+    'racon_lr': 'output/020_long_read_polishing/racon_lr.fasta'
 }
 
 busco_lineages = [
     'arthropoda_odb9',
-    'nematoda_odb9',
+    # 'nematoda_odb9',
     'metazoa_odb9']
+
+# chunkiness
+n_chunks = 1000
+all_chunks = [str(x) for x in range(0, n_chunks)]
+# all_chunks = [756, 817]
 
 
 #########
@@ -52,37 +60,163 @@ busco_lineages = [
 
 rule target:
     input:
-        'output/020_long_read_polishing/aln.sam',
+        'output/020_long_read_polishing/racon_lr.fasta',
         expand(('output/099_busco/{lineage}/run_{assembly}/'
                 'full_table_{assembly}.tsv'),
                lineage=busco_lineages,
                assembly=list(busco_inputs.keys()))
 
-
-rule polish_long_reads:
+rule combine_racon_chunks:
     input:
-        fasta = 'output/010_flye/assembly.fasta',
-        aln = 'output/020_long_read_polishing/aln.sam',
-        fq = ont_raw,
+        expand(('output/020_long_read_polishing/racon-chunks/'
+                '{chunk}.fasta'),
+               chunk=all_chunks)
     output:
-        'output/020_long_read_polishing/racon.fasta'
+        'output/020_long_read_polishing/racon_lr.fasta'
     log:
-        'output/logs/020_long_read_polishing/racon.log'
-    threads:
-        multiprocessing.cpu_count()
-    priority:
-        0
+        'output/logs/020_long_read_polishing/combine_racon_chunks.log'
     singularity:
         racon_container
     shell:
+        'cat {input} > {output} 2> {log}'    
+
+
+rule polish_long_reads:
+    input:
+        fasta = 'output/015_genome-chunks/chunk_{chunk}.fasta',
+        aln = 'output/020_long_read_polishing/bam-chunks/chunk_{chunk}.sam',
+        fq = 'output/020_long_read_polishing/read-chunks/chunk_{chunk}.fq'
+    output:
+        'output/020_long_read_polishing/racon-chunks/{chunk}.fasta'
+    params:
+        wait_time = '60m',
+        cuda_batches = 65
+    log:
+        'output/logs/020_long_read_polishing/racon-{chunk}.log'
+    threads:
+        multiprocessing.cpu_count()
+    singularity:
+        racon_container
+    shell:
+        'timeout {params.wait_time} '
         'racon '
         '-t {threads} '
+        '--cudapoa-batches {params.cuda_batches} '
         '{input.fq} '
         '{input.aln} '
         '{input.fasta} '
         '> {output} '
         '2> {log}'
 
+# map long reads, chunk and polish
+rule retrieve_reads:
+    input:
+        read_ids = expand(('output/020_long_read_polishing/read-ids/'
+                           'chunk_{chunk}.txt'),
+                          chunk=all_chunks),
+        fastq = ont_raw
+    output:
+        expand(('output/020_long_read_polishing/read-chunks/'
+                'chunk_{chunk}.fq'),
+               chunk=all_chunks)
+    params:
+        outdir = 'output/020_long_read_polishing/read-chunks/'
+    log:
+        'output/logs/020_long_read_polishing/retrieve_reads.log'
+    singularity:
+        biopython
+    script:
+        'src/retrieve_reads.py'
+
+rule extract_read_ids:
+    input:
+        'output/020_long_read_polishing/bam-chunks/chunk_{chunk}.sam'
+    output:
+        'output/020_long_read_polishing/read-ids/chunk_{chunk}.txt'
+    log:
+        'output/logs/020_long_read_polishing/extract_read_ids_{chunk}.log'
+    threads:
+        1
+    singularity:
+        samtools_container
+    shell:
+        'samtools view  {input} '
+        '| cut -f1 '
+        '| sort '
+        '| uniq '
+        '> {output} '
+        '2> {log}'
+
+rule chunk_bam:
+    input:
+        bam = 'output/020_long_read_polishing/aln_sorted.bam',
+        bai = 'output/020_long_read_polishing/aln_sorted.bam.bai',
+        contig_list = 'output/015_genome-chunks/chunk_{chunk}_contigs.txt'
+    output:
+        'output/020_long_read_polishing/bam-chunks/chunk_{chunk}.sam'
+    log:
+        'output/logs/020_long_read_polishing/view_{chunk}.log'
+    threads:
+        1
+    singularity:
+        samtools_container
+    shell:
+        # the horrible sed command replaces the newlines with spaces in
+        # contig_list. This allows the workflow to run before contig_list is
+        # created. Adapted from https://stackoverflow.com/a/1252191
+        'contigs="$(sed -e \':a\' -e \'N\' -e \'$!ba\' '
+        '-e \'s/\\n/ /g\' {input.contig_list})" ; '
+        'samtools view '
+        '-h '
+        '-F 2308 '  # read unmapped (0x4); not primary alignment (0x100);     supplementary alignment (0x800)
+        '-O SAM '
+        '{input.bam} '
+        '${{contigs}} '
+        '> {output} '
+        '2> {log}'
+
+rule index_bam:
+    input:
+        bam = 'output/020_long_read_polishing/aln_sorted.bam'
+    output:
+        bai = 'output/020_long_read_polishing/aln_sorted.bam.bai'
+    log:
+        'output/logs/020_long_read_polishing/index_bam.log'
+    threads:
+        1
+    singularity:
+        samtools_container
+    shell:
+        'samtools index {input.bam} {output.bai} '
+        '2> {log}'
+
+rule sort_sam:
+    input:
+        sam = 'output/020_long_read_polishing/aln.sam',
+        fasta = 'output/010_flye/assembly.fasta'
+    output:
+        bam = 'output/020_long_read_polishing/aln_sorted.bam'
+    log:
+        'output/logs/020_long_read_polishing/sort_sam.log'
+    threads:
+        multiprocessing.cpu_count()
+    singularity:
+        samtools_container
+    shell:
+        'samtools view '
+        '-T {input.fasta} '
+        '-u '
+        '{input.sam} '
+        '2> {log} '
+        '| '
+        'samtools sort '
+        '-l 0 '
+        '-m 40G '
+        '-O BAM '
+        '--threads {threads} '
+        '- '
+        '> {output.bam} '
+        '2>> {log} '
 
 rule map_ont_reads:
     input:
@@ -98,15 +232,53 @@ rule map_ont_reads:
         minimap_container
     shell:
         'minimap2 '
+        '-a '
+        '-x map-ont '
         '-t {threads} '
-        '-ax '
-        'map-ont '
         '{input.fasta} '
         '{input.fq} '
         '> {output} '
         '2> {log}'
 
 
+# chunk the assembly
+rule list_contigs:
+    input:
+        'output/015_genome-chunks/chunk_{chunk}.fasta'
+    output:
+        'output/015_genome-chunks/chunk_{chunk}_contigs.txt'
+    threads:
+        1
+    singularity:
+        bbmap_container
+    shell:
+        'grep "^>" {input} | cut -d " " -f1 | sed -e \'s/>//g\' > {output}'
+
+rule partition:
+    input:
+        'output/010_flye/assembly.fasta'
+    output:
+        expand('output/015_genome-chunks/chunk_{chunk}.fasta',
+               chunk=all_chunks)
+    params:
+        outfile = 'output/015_genome-chunks/chunk_%.fasta',
+        ways = n_chunks
+    log:
+        'output/015_genome-chunks/partition.log'
+    threads:
+        1
+    singularity:
+        bbmap_container
+    shell:
+        'partition.sh '
+        '-Xmx800g '
+        'in={input} '
+        'out={params.outfile} '
+        'ways={params.ways} '
+        '2> {log}'
+
+
+# assemble
 rule flye:
     input:
         fq = ont_raw
