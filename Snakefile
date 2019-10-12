@@ -33,6 +33,7 @@ minimap_container = 'shub://TomHarrop/singularity-containers:minimap2_2.17r941'
 racon_container = ('docker://quay.io/tomharrop/genomics:'
                    'racon_ededb83-nvidia_410-bionic')
 samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
+racon_chunks = 'shub://TomHarrop/singularity-containers:racon-chunks_0.0.5'
 
 ########
 # MAIN #
@@ -40,7 +41,8 @@ samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
 
 busco_inputs = {
     'flye': 'output/010_flye/assembly.fasta',
-    'racon_lr': 'output/020_long_read_polishing/racon_lr.fasta'
+    'racon_lr': 'output/020_long_read_polishing/racon_lr.fasta',
+    'racon_sr': 'output/030_short_read_polishing/racon_sr.fasta'
 }
 
 busco_lineages = [
@@ -60,12 +62,86 @@ all_chunks = [str(x) for x in range(0, n_chunks)]
 
 rule target:
     input:
-        'output/020_long_read_polishing/racon_lr.fasta',
+        'output/030_short_read_polishing/racon_sr.fasta',
         expand(('output/099_busco/{lineage}/run_{assembly}/'
                 'full_table_{assembly}.tsv'),
                lineage=busco_lineages,
                assembly=list(busco_inputs.keys()))
 
+
+# short read racon chunks (no GPU)
+rule racon_chunks:
+    input:
+        assembly = 'output/020_long_read_polishing/racon_lr.fasta',
+        reads = 'output/030_short_read_polishing/short_reads.fq'
+    output:
+        'output/030_short_read_polishing/racon_sr.fasta'
+    params:
+        outdir = 'output/030_short_read_polishing',
+        output_filename = 'racon_sr.fasta'
+    log:
+        'output/logs/030_short_read_polishing/racon_chunks.log'
+    threads:
+        multiprocessing.cpu_count()
+    singularity:
+        racon_chunks
+    shell:
+        'racon_chunks '
+        '--reads {input.reads} '
+        '--assembly {input.assembly} '
+        '--outdir {params.outdir} '
+        '--output_filename {params.output_filename} '
+        '--threads {threads} '
+        '&> {log}'
+
+
+rule process_illumina:
+    input:
+        r1 = 'data/illumina/CC481_R1.fq.gz',
+        r2 = 'data/illumina/CC481_R2.fq.gz'
+    output:
+        fq = 'output/030_short_read_polishing/short_reads.fq',
+        f_stats = 'output/030_short_read_polishing/short_reads-filter.txt',
+        t_stats = 'output/030_short_read_polishing/short_reads-trim.txt'
+    log:
+        filter = 'output/logs/030_short_read_polishing/filter.log',
+        trim = 'output/logs/030_short_read_polishing/trim.log',
+        repair = 'output/logs/030_short_read_polishing/repair.log'
+    params:
+        filter = '/phix174_ill.ref.fa.gz',
+        trim = '/adapters.fa'
+    threads:
+        multiprocessing.cpu_count()
+    singularity:
+        bbmap_container
+    shell:
+        'bbduk.sh '
+        'threads={threads} '
+        'in={input.r1} '
+        'in2={input.r2} '
+        'out=stdout.fastq '
+        'ref={params.filter} '
+        'hdist=1 '
+        'stats={output.f_stats} '
+        '2> {log.filter} '
+        '| '
+        'bbduk.sh '
+        'threads={threads} '
+        'in=stdin.fastq '
+        'int=t '
+        'out=stdout.fastq '
+        'ref={params.trim} '
+        'ktrim=r k=23 mink=11 hdist=1 tpe tbo '
+        'forcetrimmod=5 '
+        'stats={output.t_stats} '
+        '2> {log.trim} '
+        '| '
+        'repair.sh '
+        'in=stdin.fastq '
+        'out={output.fq} '
+        '2> {log.repair} '
+
+# long read racon chunks
 rule combine_racon_chunks:
     input:
         expand(('output/020_long_read_polishing/racon-chunks/'
