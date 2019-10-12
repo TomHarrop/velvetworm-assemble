@@ -33,7 +33,7 @@ minimap_container = 'shub://TomHarrop/singularity-containers:minimap2_2.17r941'
 racon_container = ('docker://quay.io/tomharrop/genomics:'
                    'racon_ededb83-nvidia_410-bionic')
 samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
-racon_chunks = 'shub://TomHarrop/singularity-containers:racon-chunks_0.0.5'
+racon_chunks = 'TomHarrop/racon-chunks:racon-chunks_0.0.5'
 
 ########
 # MAIN #
