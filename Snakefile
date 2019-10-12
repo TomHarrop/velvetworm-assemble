@@ -78,7 +78,8 @@ rule racon_chunks:
         'output/030_short_read_polishing/racon_sr.fasta'
     params:
         outdir = 'output/030_short_read_polishing',
-        output_filename = 'racon_sr.fasta'
+        output_filename = 'racon_sr.fasta',
+        chunks = '1000'
     log:
         'output/logs/030_short_read_polishing/racon_chunks.log'
     threads:
@@ -92,6 +93,7 @@ rule racon_chunks:
         '--outdir {params.outdir} '
         '--output_filename {params.output_filename} '
         '--threads {threads} '
+        '--chunks {params.chunks} '
         '&> {log}'
 
 
