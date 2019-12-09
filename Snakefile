@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import multiprocessing
-import pathlib2
+import pathlib
 import tempfile
 
 
@@ -16,7 +16,7 @@ def busco_resolver(wildcards):
 
 
 def resolve_path(x):
-    return(str(pathlib2.Path(x).resolve()))
+    return(str(pathlib.Path(x).resolve()))
 
 
 ###########
@@ -34,6 +34,7 @@ racon_container = ('docker://quay.io/tomharrop/genomics:'
                    'racon_ededb83-nvidia_410-bionic')
 samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
 racon_chunks = 'shub://TomHarrop/racon-chunks:racon-chunks_0.0.5'
+pigz = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
 
 ########
 # MAIN #
@@ -96,52 +97,90 @@ rule racon_chunks:
         '--chunks {params.chunks} '
         '&> {log}'
 
-
-rule process_illumina:
+rule combine_illumina:
     input:
-        r1 = 'data/illumina/CC481_R1.fq.gz',
-        r2 = 'data/illumina/CC481_R2.fq.gz'
+        expand('output/030_short_read_polishing/run{run}.fastq',
+               run=['1', '2'])
     output:
-        fq = 'output/030_short_read_polishing/short_reads.fq',
-        f_stats = 'output/030_short_read_polishing/short_reads-filter.txt',
-        t_stats = 'output/030_short_read_polishing/short_reads-trim.txt'
+        'output/030_short_read_polishing/short_reads.fq'
+    singularity:
+        bbmap_container
+    shell:
+        'cat {input} > {output}'
+
+rule trim_illumina:
+    input:
+        'output/030_short_read_polishing/run{run}_filter.fastq'
+    output:
+        p = pipe('output/030_short_read_polishing/run{run}.fastq'),
+        stats = 'output/030_short_read_polishing/run{run}_trim.txt'
     log:
-        filter = 'output/logs/030_short_read_polishing/filter.log',
-        trim = 'output/logs/030_short_read_polishing/trim.log',
-        repair = 'output/logs/030_short_read_polishing/repair.log'
+        'output/logs/030_short_read_polishing/run{run}_trim.log'
     params:
-        filter = '/phix174_ill.ref.fa.gz',
         trim = '/adapters.fa'
     threads:
-        multiprocessing.cpu_count()
+        10
     singularity:
         bbmap_container
     shell:
         'bbduk.sh '
-        'threads={threads} '
-        'in={input.r1} '
-        'in2={input.r2} '
-        'out=stdout.fastq '
-        'ref={params.filter} '
-        'hdist=1 '
-        'stats={output.f_stats} '
-        '2> {log.filter} '
-        '| '
-        'bbduk.sh '
-        'threads={threads} '
-        'in=stdin.fastq '
+        # 'threads={threads} '
+        'in={input} '
         'int=t '
         'out=stdout.fastq '
         'ref={params.trim} '
         'ktrim=r k=23 mink=11 hdist=1 tpe tbo '
         'forcetrimmod=5 '
-        'stats={output.t_stats} '
-        '2> {log.trim} '
-        '| '
+        'stats={output.stats} '
+        '>> {output.p} '
+        '2> {log} '
+
+
+rule filter_illumina:
+    input:
+        'output/030_short_read_polishing/repair_run{run}.fastq'
+    output:
+        p = pipe('output/030_short_read_polishing/run{run}_filter.fastq'),
+        stats = 'output/030_short_read_polishing/run{run}_filter.txt'
+    log:
+        'output/logs/030_short_read_polishing/run{run}_filter.log'
+    params:
+        filter = '/phix174_ill.ref.fa.gz'
+    threads:
+        10
+    singularity:
+        bbmap_container
+    shell:
+        'bbduk.sh '
+        # 'threads={threads} '
+        'in={input} '
+        'int=t '
+        'out=stdout.fastq '
+        'ref={params.filter} '
+        'hdist=1 '
+        'stats={output.stats} '
+        '>> {output.p} '
+        '2> {log}'
+
+rule repair_illumina:
+    input:
+        r1 = 'data/illumina_run{run}/CC481_R1.fq.gz',
+        r2 = 'data/illumina_run{run}/CC481_R2.fq.gz',
+        # r1 = 'test/illumina_run{run}/CC481_R1.fq',
+        # r2 = 'test/illumina_run{run}/CC481_R2.fq',
+    output:
+        p = pipe('output/030_short_read_polishing/repair_run{run}.fastq'),
+    log:
+        'output/logs/030_short_read_polishing/repair_run{run}.log'
+    singularity:
+        bbmap_container
+    shell:
         'repair.sh '
-        'in=stdin.fastq '
-        'out={output.fq} '
-        '2> {log.repair} '
+        'in={input.r1} '
+        'in2={input.r2} '
+        'out=stdout.fastq '
+        '>> {output.p} '
+        '2> {log}'
 
 # long read racon chunks
 rule combine_racon_chunks:
