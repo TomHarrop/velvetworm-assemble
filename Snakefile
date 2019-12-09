@@ -124,7 +124,7 @@ rule trim_illumina:
         bbmap_container
     shell:
         'bbduk.sh '
-        # 'threads={threads} '
+        'threads={threads} '
         'in={input} '
         'int=t '
         'out=stdout.fastq '
@@ -152,7 +152,7 @@ rule filter_illumina:
         bbmap_container
     shell:
         'bbduk.sh '
-        # 'threads={threads} '
+        'threads={threads} '
         'in={input} '
         'int=t '
         'out=stdout.fastq '
@@ -166,8 +166,6 @@ rule repair_illumina:
     input:
         r1 = 'data/illumina_run{run}/CC481_R1.fq.gz',
         r2 = 'data/illumina_run{run}/CC481_R2.fq.gz',
-        # r1 = 'test/illumina_run{run}/CC481_R1.fq',
-        # r2 = 'test/illumina_run{run}/CC481_R2.fq',
     output:
         p = pipe('output/030_short_read_polishing/repair_run{run}.fastq'),
     log:
