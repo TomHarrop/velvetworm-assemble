@@ -95,6 +95,7 @@ rule racon_chunks:
         '--output_filename {params.output_filename} '
         '--threads {threads} '
         '--chunks {params.chunks} '
+        '--wait_min 120 '
         '&> {log}'
 
 rule combine_illumina:
