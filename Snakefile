@@ -28,13 +28,15 @@ ont_raw = 'data/all_passed_reads.fastq'
 bbmap_container = 'shub://TomHarrop/singularity-containers:bbmap_38.50b'
 biopython = 'shub://TomHarrop/singularity-containers:biopython_1.73'
 busco_container = 'shub://TomHarrop/singularity-containers:busco_3.0.2'
-flye_container = 'shub://TomHarrop/singularity-containers:flye_2.5'
+flye_container = 'shub://TomHarrop/assemblers:flye_2.7b-cf8c288'
 minimap_container = 'shub://TomHarrop/singularity-containers:minimap2_2.17r941'
+pigz = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
+porechop = 'shub://TomHarrop/ont-containers:porechop_0.2.4'
+racon_chunks = 'shub://TomHarrop/racon-chunks:racon-chunks_0.0.5'
 racon_container = ('docker://quay.io/tomharrop/genomics:'
                    'racon_ededb83-nvidia_410-bionic')
 samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
-racon_chunks = 'shub://TomHarrop/racon-chunks:racon-chunks_0.0.5'
-pigz = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
+
 
 ########
 # MAIN #
@@ -397,14 +399,14 @@ rule partition:
 # assemble
 rule flye:
     input:
-        fq = ont_raw
+        fq = 'output/005_trim/ont_trimmed.fq'
     output:
         'output/010_flye/assembly.fasta'
     params:
         outdir = 'output/010_flye',
-        size = '2g'
+        size = '10g'
     threads:
-        multiprocessing.cpu_count()
+        min(128, multiprocessing.cpu_count())
     priority:
         10
     log:
@@ -413,13 +415,74 @@ rule flye:
         flye_container
     shell:
         'flye '
-        '--iterations 1 '
         '--resume '
         '--nano-raw {input.fq} '
         '--genome-size {params.size} '
         '--out-dir {params.outdir} '
         '--threads {threads} '
         '&>> {log}'
+
+
+rule gather_trimmed_reads:
+    input:
+        expand('output/005_trim/trimmed-chunk_{chunk}.fq',
+               chunk=[str(x) for x in range(0, 100)])
+    output:
+        'output/005_trim/ont_trimmed.fq'
+    singularity:
+        flye_container
+    shell:
+        'cat {input} > {output}'
+
+
+rule remove_ont_adaptors:
+    input:
+        'output/005_trim/raw-chunk_{chunk}.fq'
+    output:
+        'output/005_trim/trimmed-chunk_{chunk}.fq'
+    log:
+        'output/logs/remove_ont_adaptors.{chunk}.log'
+    threads:
+        multiprocessing.cpu_count()
+    singularity:
+        porechop
+    shell:
+        'porechop '
+        '-i {input} '
+        '-o {output} '
+        '--verbosity 1 '
+        '--threads {threads} '
+        '--check_reads 1000 '
+        '--discard_middle '
+        '&> {log}'
+
+
+
+
+rule chunk_raw_reads:
+    input:
+        ont_raw
+    output:
+        temp(expand('output/005_trim/raw-chunk_{chunk}.fq',
+                    chunk=[str(x) for x in range(0, 100)]))
+    params:
+        outfile = 'output/005_trim/raw-chunk_%.fq',
+        ways = 100
+    log:
+        'output/chunk_raw_reads.log'
+    threads:
+        1
+    singularity:
+        bbmap_container
+    shell:
+        'partition.sh '
+        '-Xmx800g '
+        'in={input} '
+        'out={params.outfile} '
+        'ways={params.ways} '
+        '2> {log}'
+
+
 
 # generic BUSCO rule
 rule busco:
