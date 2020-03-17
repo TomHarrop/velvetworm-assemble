@@ -28,7 +28,7 @@ ont_raw = 'data/all_passed_reads.fastq'
 bbmap_container = 'shub://TomHarrop/singularity-containers:bbmap_38.50b'
 biopython = 'shub://TomHarrop/singularity-containers:biopython_1.73'
 busco_container = 'shub://TomHarrop/singularity-containers:busco_3.0.2'
-flye_container = 'shub://TomHarrop/assemblers:flye_2.7b-cf8c288'
+flye_container = 'shub://TomHarrop/assemblers:flye_2.7'
 minimap_container = 'shub://TomHarrop/singularity-containers:minimap2_2.17r941'
 pigz = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
 porechop = 'shub://TomHarrop/ont-containers:porechop_0.2.4'
@@ -43,7 +43,7 @@ samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
 ########
 
 busco_inputs = {
-    'flye': 'output/010_flye/assembly.fasta',
+    'flye': 'output/020_flye-polish/assembly.fasta',
     'racon_lr': 'output/020_long_read_polishing/racon_lr.fasta',
     'racon_sr': 'output/030_short_read_polishing/racon_sr.fasta'
 }
@@ -397,18 +397,42 @@ rule partition:
 
 
 # assemble
+rule flye_polish:
+    input:
+        fq = 'output/005_trim/ont_trimmed.fq',
+        fa = 'output/010_flye/30-contigger/contigs.fasta'
+    output:
+        'output/020_flye-polish/assembly.fasta'
+    params:
+        outdir = 'output/020_flye-polish',
+        size = '10g'
+    threads:
+        min(128, multiprocessing.cpu_count())
+    log:
+        'output/logs/020_flye-polish.log'
+    singularity:
+        flye_container
+    shell:
+        'flye '
+        '--nano-raw {input.fq} '
+        '--polish-target {input.fa} '
+        '--genome-size {params.size} '
+        '--out-dir {params.outdir} '
+        '--threads {threads} '
+        '&>> {log}'
+
+
 rule flye:
     input:
         fq = 'output/005_trim/ont_trimmed.fq'
     output:
-        'output/010_flye/assembly.fasta'
+        # 'output/010_flye/assembly.fasta'
+        'output/010_flye/30-contigger/contigs.fasta'
     params:
         outdir = 'output/010_flye',
         size = '10g'
     threads:
         min(128, multiprocessing.cpu_count())
-    priority:
-        10
     log:
         'output/logs/010_flye.log'
     singularity:
@@ -419,6 +443,7 @@ rule flye:
         '--nano-raw {input.fq} '
         '--genome-size {params.size} '
         '--out-dir {params.outdir} '
+        '--stop-after repeat '
         '--threads {threads} '
         '&>> {log}'
 
