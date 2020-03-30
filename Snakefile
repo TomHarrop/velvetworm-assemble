@@ -43,7 +43,7 @@ samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
 ########
 
 busco_inputs = {
-    'flye': 'output/020_flye-polish/assembly.fasta',
+    'flye': 'output/020_flye-polish/polished_1.fasta',
     'racon_lr': 'output/020_long_read_polishing/racon_lr.fasta',
     'racon_sr': 'output/030_short_read_polishing/racon_sr.fasta'
 }
@@ -402,7 +402,7 @@ rule flye_polish:
         fq = 'output/005_trim/ont_trimmed.fq',
         fa = 'output/010_flye/30-contigger/contigs.fasta'
     output:
-        'output/020_flye-polish/assembly.fasta'
+        'output/020_flye-polish/polished_1.fasta'
     params:
         outdir = 'output/020_flye-polish',
         size = '10g'
