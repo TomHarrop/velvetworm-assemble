@@ -27,7 +27,7 @@ ont_raw = 'data/all_passed_reads.fastq'
 
 bbmap_container = 'shub://TomHarrop/singularity-containers:bbmap_38.50b'
 biopython = 'shub://TomHarrop/singularity-containers:biopython_1.73'
-busco_container = 'shub://TomHarrop/singularity-containers:busco_3.0.2'
+busco = 'docker://ezlabgva/busco:v4.0.5_cv1'
 flye_container = 'shub://TomHarrop/assemblers:flye_2.7'
 minimap_container = 'shub://TomHarrop/singularity-containers:minimap2_2.17r941'
 pigz = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
@@ -66,10 +66,10 @@ all_chunks = [str(x) for x in range(0, n_chunks)]
 rule target:
     input:
         'output/030_short_read_polishing/racon_sr.fasta',
-        expand(('output/099_busco/{lineage}/run_{assembly}/'
-                'full_table_{assembly}.tsv'),
-               lineage=busco_lineages,
-               assembly=list(busco_inputs.keys()))
+        expand(('output/099_busco/'
+                '{name}/run_metazoa_odb10/'
+                'full_table.tsv'),
+               name=list(busco_inputs.keys()))
 
 
 # short read racon chunks (no GPU)
@@ -513,31 +513,65 @@ rule chunk_raw_reads:
 rule busco:
     input:
         unpack(busco_resolver),
-        lineage = 'data/busco/{lineage}'
+        lineage = 'data/metazoa_odb10'
     output:
-        'output/099_busco/{lineage}/run_{name}/full_table_{name}.tsv'
+        ('output/099_busco/'
+         '{name}/run_metazoa_odb10/'
+         'full_table.tsv'),
     log:
-        resolve_path('output/logs/099_busco/{lineage}-{name}.log')
+        Path(('output/logs/'
+              'busco.{assembly}.log')).resolve()
     params:
-        wd = 'output/099_busco/{lineage}',
-        fasta = lambda wildcards, input: resolve_path(input.fasta),
-        lineage = lambda wildcards, input: resolve_path(input.lineage),
-        tmpdir = tempfile.mkdtemp()
+        wd = 'output/099_busco',
+        name = '{name}',
+        fasta = lambda wildcards, input: Path(input.fasta).resolve(),
+        lineage = lambda wildcards, input:
+            Path(input.lineage).resolve()
     threads:
         multiprocessing.cpu_count()
-    priority:
-        1
     singularity:
-        busco_container
+        busco
     shell:
         'cd {params.wd} || exit 1 ; '
-        'run_BUSCO.py '
+        'busco '
         '--force '
-        '--tmp_path {params.tmpdir} '
         '--in {params.fasta} '
-        '--out {wildcards.name} '
-        '--lineage {params.lineage} '
+        '--out {params.name} '
+        '--lineage_dataset {params.lineage} '
         '--cpu {threads} '
         '--mode genome '
         '&> {log}'
+
+
+
+# rule busco:
+#     input:
+#         unpack(busco_resolver),
+#         lineage = 'data/busco/{lineage}'
+#     output:
+#         'output/099_busco/{lineage}/run_{name}/full_table_{name}.tsv'
+#     log:
+#         resolve_path('output/logs/099_busco/{lineage}-{name}.log')
+#     params:
+#         wd = 'output/099_busco/{lineage}',
+#         fasta = lambda wildcards, input: resolve_path(input.fasta),
+#         lineage = lambda wildcards, input: resolve_path(input.lineage),
+#         tmpdir = tempfile.mkdtemp()
+#     threads:
+#         multiprocessing.cpu_count()
+#     priority:
+#         1
+#     singularity:
+#         busco_container
+#     shell:
+#         'cd {params.wd} || exit 1 ; '
+#         'run_BUSCO.py '
+#         '--force '
+#         '--tmp_path {params.tmpdir} '
+#         '--in {params.fasta} '
+#         '--out {wildcards.name} '
+#         '--lineage {params.lineage} '
+#         '--cpu {threads} '
+#         '--mode genome '
+#         '&> {log}'
 
