@@ -520,7 +520,7 @@ rule busco:
          'full_table.tsv'),
     log:
         Path(('output/logs/'
-              'busco.{assembly}.log')).resolve()
+              'busco.{name}.log')).resolve()
     params:
         wd = 'output/099_busco',
         name = '{name}',
