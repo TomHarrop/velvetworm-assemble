@@ -502,6 +502,7 @@ rule chunk_raw_reads:
     shell:
         'partition.sh '
         '-Xmx800g '
+        'qin=33 '
         'in={input} '
         'out={params.outfile} '
         'ways={params.ways} '
