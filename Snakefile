@@ -468,7 +468,7 @@ rule remove_ont_adaptors:
     log:
         'output/logs/remove_ont_adaptors.{chunk}.log'
     threads:
-        multiprocessing.cpu_count()
+        max(1, multiprocessing.cpu_count() // n_chunks)
     singularity:
         porechop
     shell:
@@ -489,10 +489,10 @@ rule chunk_raw_reads:
         ont_raw
     output:
         temp(expand('output/005_trim/raw-chunk_{chunk}.fq',
-                    chunk=[str(x) for x in range(0, 100)]))
+                    chunk=[str(x) for x in range(0, n_chunks)]))
     params:
         outfile = 'output/005_trim/raw-chunk_%.fq',
-        ways = 100
+        ways = n_chunks
     log:
         'output/chunk_raw_reads.log'
     threads:
