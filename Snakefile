@@ -54,7 +54,7 @@ busco_lineages = [
     'metazoa_odb9']
 
 # chunkiness
-n_chunks = 1000
+n_chunks = 100
 all_chunks = [str(x) for x in range(0, n_chunks)]
 # all_chunks = [756, 817]
 
@@ -451,7 +451,7 @@ rule flye:
 rule gather_trimmed_reads:
     input:
         expand('output/005_trim/trimmed-chunk_{chunk}.fq',
-               chunk=[str(x) for x in range(0, 100)])
+               chunk=[str(x) for x in range(0, n_chunks)])
     output:
         'output/005_trim/ont_trimmed.fq'
     singularity:
