@@ -430,7 +430,7 @@ rule flye:
         'output/010_flye/30-contigger/contigs.fasta'
     params:
         outdir = 'output/010_flye',
-        size = '10g'
+        # size = '10g'
     threads:
         min(128, multiprocessing.cpu_count())
     log:
@@ -439,9 +439,9 @@ rule flye:
         flye_container
     shell:
         'flye '
-        '--resume '
+        # '--resume '
         '--nano-raw {input.fq} '
-        '--genome-size {params.size} '
+        # '--genome-size {params.size} '
         '--out-dir {params.outdir} '
         '--stop-after repeat '
         '--threads {threads} '
