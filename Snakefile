@@ -25,17 +25,17 @@ def resolve_path(x):
 
 ont_raw = 'data/all_passed_reads.fastq'
 
-bbmap_container = 'shub://TomHarrop/singularity-containers:bbmap_38.50b'
+bbmap_container = 'docker://ghcr.io/deardenlab/container-bbmap:bbmap_38.90'
 biopython = 'shub://TomHarrop/singularity-containers:biopython_1.73'
 busco = 'docker://ezlabgva/busco:v4.0.5_cv1'
-flye_container = 'shub://TomHarrop/assemblers:flye_2.7'
+flye_container = 'docker://ghcr.io/tomharrop/container-flye:2.9'
 minimap_container = 'shub://TomHarrop/singularity-containers:minimap2_2.17r941'
 pigz = 'shub://TomHarrop/singularity-containers:pigz_2.4.0'
 porechop = 'shub://TomHarrop/ont-containers:porechop_0.2.4'
 racon_chunks = 'shub://TomHarrop/racon-chunks:racon-chunks_0.0.5'
 racon_container = ('docker://quay.io/tomharrop/genomics:'
                    'racon_ededb83-nvidia_410-bionic')
-samtools_container = 'shub://TomHarrop/singularity-containers:samtools_1.9'
+samtools_container = 'docker://ghcr.io/deardenlab/container-samtools:samtools_1.12'
 
 
 ########
